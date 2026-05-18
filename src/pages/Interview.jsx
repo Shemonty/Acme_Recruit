@@ -10,6 +10,15 @@ const LEVEL_COLOR = {
   Senior:       { text: '#fbbf24', bg: 'rgba(234,179,8,0.12)',  border: 'rgba(234,179,8,0.30)' },
 }
 
+// Normalise Gemini's inconsistent question type strings
+function normalizeType(raw) {
+  const t = (raw || '').toLowerCase().replace(/[_\s/]+/g, '')
+  if (t === 'mcq' || t === 'multiplechoice') return 'MCQ'
+  if (t.startsWith('true') || t === 'truefalse' || t === 'boolean') return 'True / False'
+  if (t.includes('open') || t.includes('text') || t.includes('essay')) return 'Open Text'
+  return raw // fallback — keep original
+}
+
 export default function Interview() {
   const { jobId } = useParams()
   const navigate  = useNavigate()
@@ -148,11 +157,12 @@ export default function Interview() {
     const totalMin = Math.max(1, Math.round((Date.now() - startRef.current) / 60000))
 
     const scored = finalAnswers.map(a => {
-      if (a.type !== 'Open Text') {
+      const normType = normalizeType(a.type)
+      if (normType !== 'Open Text') {
         const ok = a.answer?.trim().toLowerCase() === a.correct_answer?.trim().toLowerCase()
-        return { ...a, points: ok ? 1 : 0 }
+        return { ...a, type: normType, points: ok ? 1 : 0 }
       }
-      return { ...a, points: 0 }
+      return { ...a, type: normType, points: 0 }
     })
 
     const openQs = scored.filter(a => a.type === 'Open Text')
@@ -179,7 +189,7 @@ Return ONLY a JSON array of integer scores in the same order, e.g. [7, 3, 9]. No
         const aiScores = JSON.parse(raw.replace(/```json|```/g, '').trim())
         let si = 0
         scored.forEach(a => {
-          if (a.type === 'Open Text') { a.points = (aiScores[si++] || 0) / 10 }
+          if (normalizeType(a.type) === 'Open Text') { a.points = (aiScores[si++] || 0) / 10 }
         })
       } catch { /* open text stays 0 if AI fails */ }
     }
@@ -435,7 +445,7 @@ Return ONLY a JSON array of integer scores in the same order, e.g. [7, 3, 9]. No
                       <p className="text-lg font-bold text-white leading-relaxed mb-5">{q.question}</p>
 
                       {/* MCQ */}
-                      {q.type === 'MCQ' && q.options && (
+                      {normalizeType(q.type) === 'MCQ' && q.options && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           {q.options.map((opt, j) => (
                             <button key={j}
@@ -451,7 +461,7 @@ Return ONLY a JSON array of integer scores in the same order, e.g. [7, 3, 9]. No
                       )}
 
                       {/* True / False */}
-                      {q.type === 'True / False' && (
+                      {normalizeType(q.type) === 'True / False' && (
                         <div className="grid grid-cols-2 gap-4">
                           {['True', 'False'].map(opt => (
                             <button key={opt}
@@ -471,7 +481,7 @@ Return ONLY a JSON array of integer scores in the same order, e.g. [7, 3, 9]. No
                       )}
 
                       {/* Open Text */}
-                      {q.type === 'Open Text' && (
+                      {normalizeType(q.type) === 'Open Text' && (
                         <textarea value={ans || ''} rows={4}
                           onChange={e => { answersRef.current[i] = e.target.value; setAnswers(prev => ({ ...prev, [i]: e.target.value })) }}
                           placeholder="Type your answer here..."
