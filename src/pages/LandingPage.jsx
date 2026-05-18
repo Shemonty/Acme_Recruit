@@ -65,7 +65,7 @@ export default function LandingPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0f1117]/90 backdrop-blur border-b border-white/10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/src/images/logo.png" alt="Acme AI" className="h-20 w-auto" />
+            <img src="/src/images/logo.png" alt="Acme AI" className="h-10 w-auto" />
           </div>
           <div className="hidden md:flex items-center gap-8 text-sm text-gray-200">
             <a href="#jobs" className="hover:text-white transition-colors text-white">Open Positions</a>
@@ -95,9 +95,40 @@ export default function LandingPage() {
               <p className="text-gray-300 text-sm leading-relaxed mb-10 max-w-xl">
                 Join our team and work at the frontier of artificial intelligence. Our AI-powered interview process is fast, fair, and designed to find the best, hear back within 3–5 business days.
               </p>
+              {/* SERVICES PILLS */}
+              <div className="mt-8 flex flex-wrap gap-3">
+
+                {[
+                  'Data Annotation',
+                  'Computer Vision',
+                  'GenAI Solutions',
+                  'LLMOps',
+                  'Remote Teams',
+                ].map((s, i) => (
+
+                  <div
+                    key={i}
+                    className="
+        px-4 py-2
+        rounded-full
+        border border-white/10
+        bg-white/5
+        backdrop-blur-md
+        text-xs text-gray-200
+        hover:bg-blue-500/20
+        hover:border-blue-400/40
+        transition-all duration-300
+      "
+                  >
+                    {s}
+                  </div>
+
+                ))}
+
+              </div>
               <div className="flex items-center gap-4">
-                <a href="#jobs" className="px-6 py-3 bg-blue-700 hover:bg-blue-500 text-white font-medium rounded-lg transition-all duration-200 text-sm">View Open Positions</a>
-                <a href="https://www.acmeai.tech" target="_blank" rel="noreferrer" className="px-6 py-3 text-gray-300 hover:text-white font-medium text-sm transition-colors">Learn more →</a>
+                <a href="#jobs" className="px-6 py-3 mt-10  bg-blue-700 hover:bg-blue-500 text-white font-medium rounded-lg transition-all duration-200 text-sm">View Open Positions</a>
+                <a href="https://www.acmeai.tech" target="_blank" rel="noreferrer" className="px-6 py-3 mt-10 text-gray-300 hover:text-white font-medium text-sm transition-colors">Learn more →</a>
               </div>
             </div>
             <div className="lg:w-80 w-full grid grid-cols-2 gap-4">
@@ -107,26 +138,28 @@ export default function LandingPage() {
                   <div className="text-xs text-gray-300 leading-snug">{stat.label}</div>
                 </div>
               ))}
+
             </div>
+
           </div>
+
         </div>
+
       </section>
 
-      {/* ── SERVICES STRIP ── */}
-      <section id="about" className="border-y border-white/10 bg-white/[0.02] py-10 px-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex flex-wrap gap-6 justify-center text-sm text-gray-300">
-            {['Data Annotation / Labelling', 'Computer Vision', 'GenAI Solutions', 'Remote Team Placements', 'LLMOps', 'B2B Consultation'].map((s, i) => (
-              <span key={i} className="flex items-center gap-2">
-                <span className="w-1 h-1 bg-blue-500 rounded-full" />{s}
-              </span>
-            ))}
-          </div>
-        </div>
-      </section>
 
       {/* ── JOB LISTINGS ── */}
-      <section id="jobs" className="py-20 px-6">
+     <section
+  id="jobs"
+  className="relative py-20 px-6 bg-cover bg-center bg-no-repeat overflow-hidden  bg-[#0b1120]/80"
+  style={{
+    backgroundImage: "url('/src/images/body.jpg')"
+  }}
+>
+
+
+ 
+
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-4xl font-bold leading-tight tracking-tight mb-6">Find your next opportunity</h2>
@@ -221,9 +254,9 @@ function AcmeChatbot() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const bottomRef = useRef(null)
-  
-  
-const SYSTEM_PROMPT = `
+
+
+  const SYSTEM_PROMPT = `
 You are the official AI assistant of Acme AI Ltd.
 
 Your responsibility is to answer ALL possible questions related to Acme AI Ltd professionally, confidently, and naturally.
@@ -411,55 +444,55 @@ BEHAVIOR RULES
 
 
 
-async function callAI(messages) {
-  const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY
+  async function callAI(messages) {
+    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY
 
-  const response = await fetch(
-    'https://openrouter.ai/api/v1/chat/completions',
-    {
-      method: 'POST',
+    const response = await fetch(
+      'https://openrouter.ai/api/v1/chat/completions',
+      {
+        method: 'POST',
 
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
 
-      body: JSON.stringify({
-        model: 'openai/gpt-3.5-turbo',
+        body: JSON.stringify({
+          model: 'openai/gpt-3.5-turbo',
 
-        messages: [
-          {
-            role: 'system',
-            content: SYSTEM_PROMPT,
-          },
+          messages: [
+            {
+              role: 'system',
+              content: SYSTEM_PROMPT,
+            },
 
-          ...messages.map(m => ({
-            role: m.role === 'assistant' ? 'assistant' : 'user',
-            content: m.text,
-          })),
-        ],
+            ...messages.map(m => ({
+              role: m.role === 'assistant' ? 'assistant' : 'user',
+              content: m.text,
+            })),
+          ],
 
-        temperature: 0.7,
-        max_tokens: 500,
-      }),
+          temperature: 0.7,
+          max_tokens: 500,
+        }),
+      }
+    )
+
+    const data = await response.json()
+
+    console.log(data)
+
+    if (!response.ok) {
+      throw new Error(
+        data?.error?.message || 'AI request failed'
+      )
     }
-  )
 
-  const data = await response.json()
-
-  console.log(data)
-
-  if (!response.ok) {
-    throw new Error(
-      data?.error?.message || 'AI request failed'
+    return (
+      data?.choices?.[0]?.message?.content ||
+      'Sorry, no response generated.'
     )
   }
-
-  return (
-    data?.choices?.[0]?.message?.content ||
-    'Sorry, no response generated.'
-  )
-}
 
 
 
@@ -479,32 +512,32 @@ async function callAI(messages) {
         parts: [{ text: m.text }],
       }))
 
-const reply = await callAI(updatedMessages)
+      const reply = await callAI(updatedMessages)
 
-const cleanedReply = reply
-  .replace(/\*\*(.*?)\*\*/g, '$1')
-  .replace(/\*/g, '')
-  .replace(/#{1,6}\s/g, '')
-  .trim()
+      const cleanedReply = reply
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/\*/g, '')
+        .replace(/#{1,6}\s/g, '')
+        .trim()
 
-setMessages(prev => [
-  ...prev,
-  { role: 'assistant', text: cleanedReply }
-])
-    } 
-    catch (e) {
-  console.error('Chatbot error:', e.message)
-
-  setMessages(prev => [
-    ...prev,
-    {
-      role: 'assistant',
-      text: `Error: ${e.message}`
+      setMessages(prev => [
+        ...prev,
+        { role: 'assistant', text: cleanedReply }
+      ])
     }
-  ])
-}
-    
-    
+    catch (e) {
+      console.error('Chatbot error:', e.message)
+
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          text: `Error: ${e.message}`
+        }
+      ])
+    }
+
+
     finally {
       setLoading(false)
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
