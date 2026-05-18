@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import bannerImg from '../images/banner.jpg'
+import logoImg from '../images/logo.png'
+import bodyImg from '../images/body.jpg'
 
 const SAMPLE_JOBS = [
   { id: '1', title: 'Frontend Engineer', department: 'Engineering', level: 'Intermediate', description: 'React, TypeScript, REST APIs. 2+ years experience required.', applicants: 87, closes_at: '2026-05-15', num_questions: 10, status: 'published' },
@@ -65,7 +68,7 @@ export default function LandingPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0f1117]/90 backdrop-blur border-b border-white/10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/src/images/logo.png" alt="Acme AI" className="h-10 w-auto" />
+            <img src={logoImg} alt="Acme AI" className="h-10 w-auto" />
           </div>
           <div className="hidden md:flex items-center gap-8 text-sm text-gray-200">
             <a href="#jobs" className="hover:text-white transition-colors text-white">Open Positions</a>
@@ -80,7 +83,7 @@ export default function LandingPage() {
 
       {/* ── HERO ── */}
       <section className="relative pt-18 overflow-hidden">
-        <img src="/src/images/banner.jpg" alt="Acme AI Banner" className="absolute inset-0 w-full h-full object-cover" />
+        <img src={bannerImg} alt="Acme AI Banner" className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-[#0f1117]/20" />
         <div className="relative z-10 max-w-6xl mx-auto px-6 py-24">
           <div className="flex flex-col lg:flex-row items-start gap-16">
@@ -153,7 +156,7 @@ export default function LandingPage() {
   id="jobs"
   className="relative py-20 px-6 bg-cover bg-center bg-no-repeat overflow-hidden  bg-[#0b1120]/80"
   style={{
-    backgroundImage: "url('/src/images/body.jpg')"
+    backgroundImage: `url(${bodyImg})`
   }}
 >
 
@@ -195,7 +198,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden shadow-md">
-              <img src="/src/images/logo.png" alt="Acme AI Logo" className="w-8 h-8 object-contain" />
+              <img src={logoImg} alt="Acme AI Logo" className="w-8 h-8 object-contain" />
             </div>
             <div className="leading-tight">
               <h2 className="text-white text-2xl font-bold">Acme AI</h2>
