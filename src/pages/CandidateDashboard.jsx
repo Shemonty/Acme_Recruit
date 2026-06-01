@@ -4,15 +4,7 @@ import { supabase } from '../lib/supabase'
 import logoImg from '../images/logo.png'
 import bannerImg from '../images/banner.jpg'
 
-const MOCK_JOBS = [
-  { id: '1', title: 'Frontend Engineer', department: 'Engineering', level: 'Intermediate', work_type: 'Remote', description: 'React, TypeScript, REST APIs. 2+ years experience required. Work on our core product UI.', applicants: 87, closes_at: '2026-06-15', num_questions: 10, time_limit: 3, status: 'published' },
-  { id: '2', title: 'Backend Developer (Node)', department: 'Engineering', level: 'Senior', work_type: 'Hybrid', description: 'Node.js, PostgreSQL, system design. 5+ years required. Lead backend architecture decisions.', applicants: 52, closes_at: '2026-06-20', num_questions: 12, time_limit: 4, status: 'published' },
-  { id: '3', title: 'Data Analyst', department: 'Analytics', level: 'Beginner', work_type: 'On-site', description: 'Excel, SQL, Power BI. Fresh graduates welcome. Join our growing analytics team.', applicants: 114, closes_at: '2026-06-18', num_questions: 8, time_limit: 2, status: 'published' },
-  { id: '4', title: 'UI/UX Designer', department: 'Design', level: 'Intermediate', work_type: 'Remote', description: 'Figma, user research, design systems. Portfolio required. Shape product experience.', applicants: 39, closes_at: '2026-06-25', num_questions: 10, time_limit: 3, status: 'published' },
-  { id: '5', title: 'ML Engineer', department: 'AI/ML', level: 'Senior', work_type: 'Remote', description: 'PyTorch, model fine-tuning, LLMOps. Computer vision experience preferred.', applicants: 61, closes_at: '2026-06-30', num_questions: 15, time_limit: 5, status: 'published' },
-]
-
-const MOCK_APPS = [] 
+const MOCK_APPS = []
 
 const LC = {
   Beginner:     { text: '#4ade80', bg: 'rgba(34,197,94,0.12)',  border: 'rgba(34,197,94,0.30)' },
@@ -35,7 +27,7 @@ export default function CandidateDashboard() {
   const [tab, setTab]               = useState('Available Jobs')
   const [candidate, setCandidate]   = useState(null)
   const candidateIdRef              = useRef(null)
-  const [jobs, setJobs]             = useState(MOCK_JOBS)
+  const [jobs, setJobs]             = useState([])
   const [apps, setApps]             = useState(MOCK_APPS)
   const [loading, setLoading]       = useState(true)
   const [selJob, setSelJob]         = useState(null)
@@ -91,17 +83,14 @@ export default function CandidateDashboard() {
 
 async function loadJobs() {
   const today = new Date().toISOString().split('T')[0]
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from('jobs')
     .select('*')
     .eq('status', 'published')
     .gte('closes_at', today)
     .order('created_at', { ascending: false })
 
-  if (data && data.length > 0) {
-    setJobs(data) // ← real jobs from Supabase
-  }
-  // if empty, keep MOCK_JOBS as fallback
+  setJobs(data || [])
 }
 
   async function refreshApps() {
@@ -227,9 +216,13 @@ async function loadJobs() {
 
             {filtered.length === 0 ? (
               <div className="text-center py-20">
-                <div className="text-5xl mb-4">🎉</div>
-                <p className="font-bold text-white text-xl">You've applied to all positions!</p>
-                <p className="text-gray-300 text-sm mt-1">Check "My Applications" to track your progress.</p>
+                <div className="text-5xl mb-4">{jobs.length === 0 ? '📭' : '🎉'}</div>
+                <p className="font-bold text-white text-xl">
+                  {jobs.length === 0 ? 'No open positions right now' : "You've applied to all positions!"}
+                </p>
+                <p className="text-gray-300 text-sm mt-1">
+                  {jobs.length === 0 ? 'Check back later — HR will post new jobs soon.' : 'Check "My Applications" to track your progress.'}
+                </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -331,10 +324,9 @@ async function loadJobs() {
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-3 mb-5">
+                      <div className="grid grid-cols-2 gap-3 mb-5">
                         {[
                           { l: 'Score', v: `${app.score}%`, c: app.score >= 80 ? '#4ade80' : app.score >= 60 ? '#60a5fa' : '#f87171' },
-                          { l: 'Rank',  v: `#${app.rank || '—'}`, c: '#e2e8f0' },
                           { l: 'Time',  v: `${app.time_taken || '—'} min`, c: '#e2e8f0' },
                         ].map((s, i) => (
                           <div key={i} className="p-4 rounded-xl text-center" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)' }}>

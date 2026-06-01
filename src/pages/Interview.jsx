@@ -545,11 +545,10 @@ export default function Interview() {
                 </div>
 
                 <div className="p-6">
-                  <div className="grid grid-cols-4 gap-3 mb-5">
+                  <div className="grid grid-cols-3 gap-3 mb-5">
                     {[
                       { l: 'Your Score', v: `${result.score}%`,
                         c: result.score >= 80 ? '#4ade80' : result.score >= 60 ? '#60a5fa' : '#f87171' },
-                      { l: 'Your Rank',  v: result.rank ? `#${result.rank}` : '—', c: '#e2e8f0' },
                       { l: 'Time Taken', v: `${result.totalMin} min`, c: '#e2e8f0' },
                       { l: 'Status',     v: result.hrDecision === 'shortlisted' ? 'Shortlisted' : 'Under Review',
                         c: result.hrDecision === 'shortlisted' ? '#4ade80' : '#fbbf24' },

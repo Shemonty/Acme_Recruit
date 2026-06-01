@@ -82,6 +82,8 @@ export default function HRDashboard() {
   const [hrNote, setHrNote] = useState('')
   const [filterJob, setFilterJob] = useState('All')
   const [filterDecision, setFilterDecision] = useState('All')
+  const [candProfile, setCandProfile] = useState(null)
+  const [loadingProfile, setLoadingProfile] = useState(false)
 
   useEffect(() => { loadData() }, [])
 
@@ -336,8 +338,8 @@ export default function HRDashboard() {
       fillColor: [248, 250, 252],   // very light gray rows
     },
     columnStyles: {
-      0: { cellWidth: 8,  halign: 'center', fontStyle: 'bold' },
-      1: { cellWidth: 100 },
+      0: { cellWidth: 12,  halign: 'center', fontStyle: 'bold' },
+      1: { cellWidth: 96 },
       2: { cellWidth: 24, halign: 'center' },
       3: { cellWidth: 48 },
     },
@@ -431,6 +433,20 @@ export default function HRDashboard() {
     } catch { /* mock */ }
     setCandidates(prev => prev.map(c => c.id === appId ? { ...c, hr_decision: decision, hr_note: note } : c))
     setSelCandidate(prev => prev ? { ...prev, hr_decision: decision, hr_note: note } : null)
+  }
+
+  async function fetchCandProfile(candidateId) {
+    if (!candidateId) return
+    setLoadingProfile(true)
+    try {
+      const { data } = await supabase
+        .from('candidates')
+        .select('*')
+        .eq('id', candidateId)
+        .single()
+      setCandProfile(data || null)
+    } catch { setCandProfile(null) }
+    finally { setLoadingProfile(false) }
   }
 
   async function logout() {
@@ -761,13 +777,12 @@ export default function HRDashboard() {
                 {/* Table */}
                 <div className="rounded-2xl overflow-hidden" style={cardStyle}>
                   {/* Header */}
-                  <div className="grid grid-cols-12 gap-3 px-5 py-3 text-[10px] font-black text-gray-00 uppercase tracking-widest border-b"
+                  <div className="grid grid-cols-12 gap-3 px-5 py-3 text-[10px] font-black text-white uppercase tracking-widest border-b"
                     style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
                     <div className="col-span-4">Candidate</div>
-                    <div className="col-span-2">Score</div>
-                    <div className="col-span-2">Rank</div>
+                    <div className="col-span-3">Score</div>
                     <div className="col-span-2">Time</div>
-                    <div className="col-span-2">Status</div>
+                    <div className="col-span-3">Status</div>
                   </div>
 
                   {filteredCandidates.map(c => {
@@ -787,7 +802,7 @@ export default function HRDashboard() {
                             <p className="text-[11px] font-medium text-gray-300 truncate">{c.email}</p>
                           </div>
                         </div>
-                        <div className="col-span-2">
+                        <div className="col-span-3">
                           <div className="flex items-center gap-2">
                             <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
                               <div className="h-full rounded-full" style={{ width: `${c.score}%`, background: c.score >= 80 ? '#4ade80' : c.score >= 60 ? '#60a5fa' : '#f87171' }} />
@@ -795,9 +810,8 @@ export default function HRDashboard() {
                             <span className="text-xs font-black" style={{ color: c.score >= 80 ? '#4ade80' : c.score >= 60 ? '#60a5fa' : '#f87171' }}>{c.score}%</span>
                           </div>
                         </div>
-                        <div className="col-span-2"><span className="text-sm font-bold text-white">#{c.rank || '—'}</span></div>
                         <div className="col-span-2"><span className="text-sm font-semibold text-gray-300">{c.time_taken || '—'}m</span></div>
-                        <div className="col-span-2">
+                        <div className="col-span-3">
                           <span className="text-[11px] font-bold px-2 py-1 rounded-lg" style={{ background: ds.bg, color: ds.color, border: `1px solid ${ds.border}` }}>
                             {ds.label}
                           </span>
@@ -841,7 +855,6 @@ export default function HRDashboard() {
                       </p>
                       <p className="text-xs font-bold text-gray-200">Total Score</p>
                       <div className="flex justify-around mt-3 text-xs">
-                        <div><p className="font-black text-white">#{selCandidate.rank || '—'}</p><p className="text-gray-300">Rank</p></div>
                         <div><p className="font-black text-white">{selCandidate.time_taken || '—'}m</p><p className="text-gray-300">Time</p></div>
                         <div><p className="font-black text-white">{fmt(selCandidate.submitted_at)}</p><p className="text-gray-300">Date</p></div>
                       </div>
@@ -885,6 +898,16 @@ export default function HRDashboard() {
                         Current: {DECISION_STYLE[selCandidate.hr_decision]?.label}
                       </p>
                     </div>
+
+                    {/* View Full Profile button */}
+                    {selCandidate.candidate_id && (
+                      <button
+                        onClick={() => fetchCandProfile(selCandidate.candidate_id)}
+                        className="mt-3 w-full py-2.5 rounded-xl text-xs font-black text-white transition-all hover:brightness-110"
+                        style={{ background: 'linear-gradient(135deg,#1e3a8a,#2563eb)' }}>
+                        👤 View Full Profile
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -892,6 +915,110 @@ export default function HRDashboard() {
           )}
         </main>
       </div>
+
+      {/* ══════════════════════════
+          CANDIDATE PROFILE MODAL
+      ══════════════════════════ */}
+      {(candProfile || loadingProfile) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.82)', backdropFilter: 'blur(8px)' }}>
+          <div className="w-full max-w-2xl rounded-2xl overflow-hidden" style={{ background: '#0d1120', border: '1px solid rgba(255,255,255,0.10)', maxHeight: '90vh', overflowY: 'auto' }}>
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.08)', background: 'linear-gradient(135deg,rgba(30,58,138,0.30),rgba(37,99,235,0.10))' }}>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black text-white"
+                  style={{ background: 'linear-gradient(135deg,#1e40af,#3b82f6)' }}>
+                  {candProfile?.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2) || '??'}
+                </div>
+                <div>
+                  <p className="text-base font-black text-white">{candProfile?.full_name || '—'}</p>
+                  <p className="text-xs font-medium text-gray-300">{candProfile?.email || selCandidate?.email}</p>
+                </div>
+              </div>
+              <button onClick={() => setCandProfile(null)} className="text-gray-300 hover:text-white text-2xl leading-none">×</button>
+            </div>
+
+            {loadingProfile ? (
+              <div className="flex items-center justify-center py-20">
+                <span className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin inline-block" />
+              </div>
+            ) : (
+              <div className="p-6 space-y-5">
+
+                {/* Personal Details */}
+                <div>
+                  <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest mb-3">📋 Personal Details</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { l: 'Email',   v: candProfile?.email },
+                      { l: 'Phone',   v: candProfile?.phone },
+                      { l: 'Gender',  v: candProfile?.gender },
+                      { l: 'Address', v: candProfile?.address },
+                    ].map((item, i) => (
+                      <div key={i} className={`p-3 rounded-xl ${item.l === 'Address' ? 'col-span-2' : ''}`}
+                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest mb-1">{item.l}</p>
+                        <p className="text-sm font-semibold text-white">{item.v || '—'}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Education */}
+                <div>
+                  <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest mb-3">🎓 Education</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { l: 'Degree',       v: candProfile?.education?.degree },
+                      { l: 'Field of Study', v: candProfile?.education?.field_of_study },
+                      { l: 'Institution',  v: candProfile?.education?.institution },
+                      { l: 'Passing Year', v: candProfile?.education?.end_year },
+                      { l: 'CGPA / GPA',   v: candProfile?.education?.gpa },
+                    ].map((item, i) => (
+                      <div key={i} className={`p-3 rounded-xl ${item.l === 'Institution' ? 'col-span-2' : ''}`}
+                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest mb-1">{item.l}</p>
+                        <p className="text-sm font-semibold text-white">{item.v || '—'}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Skills */}
+                <div>
+                  <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest mb-3">🛠 Skills</p>
+                  <div className="p-4 rounded-xl flex flex-wrap gap-2" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    {(!candProfile?.skills || candProfile.skills.length === 0)
+                      ? <p className="text-sm text-gray-300">No skills listed</p>
+                      : candProfile.skills.map((s, i) => (
+                        <span key={i} className="px-3 py-1.5 rounded-xl text-xs font-bold text-blue-300"
+                          style={{ background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.28)' }}>{s}</span>
+                      ))}
+                  </div>
+                </div>
+
+                {/* Experience */}
+                <div>
+                  <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest mb-3">💼 Experience</p>
+                  {(!candProfile?.experience || candProfile.experience.length === 0)
+                    ? (
+                      <div className="p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        <p className="text-sm text-gray-300">Fresher — No prior experience</p>
+                      </div>
+                    ) : candProfile.experience.map((exp, i) => (
+                      <div key={i} className="p-4 rounded-xl mb-2" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        <p className="font-bold text-white text-sm">{exp.job_title}</p>
+                        <p className="text-xs font-semibold text-blue-300 mt-0.5">{exp.company} · {exp.start} – {exp.end || 'Present'}</p>
+                        {exp.description && <p className="text-xs font-medium text-gray-300 mt-2">{exp.description}</p>}
+                      </div>
+                    ))}
+                </div>
+
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ══════════════════════════
           JOB CREATION MODAL
