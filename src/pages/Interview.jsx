@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { scoreOpenAnswersLLM } from '../lib/llm'
 import logoImg from '../images/logo.png'
 import bannerImg from '../images/banner.jpg'
 
@@ -121,23 +122,7 @@ export default function Interview() {
     }, 1000)
   }
 
-  async function callGemini(body) {
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY
-    if (!apiKey) throw new Error('No API key')
-    const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
-    let lastErr
-    for (const model of models) {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-      )
-      if (res.ok) return res.json()
-      const err = await res.json()
-      lastErr = err?.error?.message || 'API error'
-      if (res.status !== 429 && res.status !== 503) break
-    }
-    throw new Error(lastErr)
-  }
+
 
   function submitAll() {
     clearInterval(timerRef.current)
@@ -156,10 +141,16 @@ export default function Interview() {
     setPhase('scoring')
     const totalMin = Math.max(1, Math.round((Date.now() - startRef.current) / 60000))
 
+    // Strip "A. " / "A) " / "A: " letter prefixes that the LLM sometimes adds to options
+    // but omits from correct_answer (or vice versa), causing false mismatches
+    const stripOptionPrefix = s => (s || '').replace(/^[A-Da-d][.):\s]+\s*/, '').trim()
+
     const scored = finalAnswers.map(a => {
       const normType = normalizeType(a.type)
       if (normType !== 'Open Text') {
-        const ok = a.answer?.trim().toLowerCase() === a.correct_answer?.trim().toLowerCase()
+        const userAns = stripOptionPrefix(a.answer).toLowerCase()
+        const correctAns = stripOptionPrefix(a.correct_answer).toLowerCase()
+        const ok = userAns !== '' && userAns === correctAns
         return { ...a, type: normType, points: ok ? 1 : 0 }
       }
       return { ...a, type: normType, points: 0 }
@@ -168,32 +159,26 @@ export default function Interview() {
     const openQs = scored.filter(a => a.type === 'Open Text')
     if (openQs.length > 0) {
       try {
-        const prompt = `You are a strict technical interviewer grading open-ended interview answers.
-Grade each answer from 0 to 10. Be objective:
-  0 = blank or completely wrong
-  5 = partially correct
-  10 = accurate, complete, well-explained
-
-${openQs.map((q, i) => `[${i + 1}] Question: ${q.question}
-Expected: ${q.explanation}
-Candidate answered: "${q.answer || '(blank)'}"
-`).join('\n')}
-
-Return ONLY a JSON array of integer scores in the same order, e.g. [7, 3, 9]. No extra text.`
-
-        const data = await callGemini({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 64 }
-        })
-        const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]'
-        const aiScores = JSON.parse(raw.replace(/```json|```/g, '').trim())
+        const aiScores = await scoreOpenAnswersLLM(
+          openQs.map(q => ({
+            question: q.question,
+            expected: q.explanation || q.correct_answer || '',
+            answer: q.answer || '',
+          }))
+        )
         let si = 0
         scored.forEach(a => {
-          if (normalizeType(a.type) === 'Open Text') { a.points = (aiScores[si++] || 0) / 10 }
+          if (normalizeType(a.type) === 'Open Text') {
+            const rawScore = aiScores[si++] ?? 0
+            // Blank answers always score 0 regardless of what AI returns
+            a.points = a.answer?.trim() ? rawScore / 10 : 0
+          }
         })
-      } catch { /* open text stays 0 if AI fails */ }
+      } catch (e) {
+        console.error('LLM scoring failed:', e)
+        /* open text stays 0 if AI fails */
+      }
     }
-
     const total = scored.reduce((s, a) => s + a.points, 0)
     const score = Math.round((total / scored.length) * 100)
     const hrDecision = score >= 80 ? 'shortlisted' : 'under_review'

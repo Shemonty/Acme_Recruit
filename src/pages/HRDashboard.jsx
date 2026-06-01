@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { generateQuestionsLLM, parsePDFLLM } from '../lib/llm'
 import logoImg from '../images/logo.png'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -142,283 +143,63 @@ export default function HRDashboard() {
     }
   }
 
-  // ── Gemini API call with model fallback ──
-  async function callGemini(apiKey, body) {
-    const models = ['gemini-2.5-flash', 'gemini-2.0-flash','gemini-1.5-flash']
-    let lastErr
-    for (const model of models) {
-      const res = await fetch(
-
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-      )
-      if (res.ok) return res.json()
-      const errData = await res.json()
-      lastErr = errData?.error?.message || 'API request failed'
-      if (res.status !== 429 && res.status !== 503) break
-    }
-    throw new Error(lastErr)
-  }
-
-  // ── Parse JD PDF with Gemini ──
-async function parsePDFWithGemini(file) {
-  setPdfParsing(true)
-  try {
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY
-    if (!apiKey) throw new Error('No API key found in .env')
-
-    const base64 = await new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result.split(',')[1])
-      reader.onerror = () => reject(new Error('Failed to read file'))
-      reader.readAsDataURL(file)
-    })
-
-    const data = await callGemini(apiKey, {
-      contents: [{
-        parts: [
-          {
-            inline_data: {
-              mime_type: 'application/pdf',
-              data: base64,
-            },
-          },
-          {
-            text: `Extract from this Job Description PDF and return ONLY a raw JSON object.
-
-Rules:
-- No markdown, no backticks, no extra text before or after
-- Keep description under 300 characters
-- Escape all special characters properly
-- Department must be exactly one of: Engineering, Analytics, Design, AI/ML, Marketing, Operations, HR
-
-Format:
-{"title":"Job Title Here","description":"Short role description here.","department":"Engineering"}`,
-          },
-        ],
-      }],
-      generationConfig: { 
-        temperature: 0.1, 
-        maxOutputTokens: 512,  // keep it small to avoid truncation
-      },
-    })
-
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
-    
-    // Clean the response aggressively
-    let clean = text
-      .replace(/```json/gi, '')
-      .replace(/```/g, '')
-      .trim()
-
-    // Try to extract just the JSON object if there's extra text around it
-    const jsonMatch = clean.match(/\{[\s\S]*\}/)
-    if (jsonMatch) clean = jsonMatch[0]
-
-    let parsed = null
-
-    // Attempt 1: direct parse
+ // ── Parse JD PDF with local LLM backend ──
+  async function parsePDFWithGemini(file) {
+    setPdfParsing(true)
     try {
-      parsed = JSON.parse(clean)
-    } catch {
-      // Attempt 2: fix common issues - truncated strings, trailing commas
-      try {
-        // Close any open strings and braces
-        let fixed = clean
-          .replace(/,\s*}$/, '}')           // trailing comma before }
-          .replace(/,\s*$/, '')              // trailing comma at end
-        
-        // If it looks truncated, try to close it
-        const openBraces = (fixed.match(/\{/g) || []).length
-        const closeBraces = (fixed.match(/\}/g) || []).length
-        if (openBraces > closeBraces) {
-          fixed = fixed + '"}'.repeat(openBraces - closeBraces)
-        }
-        
-        parsed = JSON.parse(fixed)
-      } catch {
-        // Attempt 3: regex extraction as last resort
-        const titleMatch = text.match(/"title"\s*:\s*"([^"]+)"/i)
-        const deptMatch = text.match(/"department"\s*:\s*"([^"]+)"/i)
-        const descMatch = text.match(/"description"\s*:\s*"([^"]{0,300})"/i)
-        
-        if (!titleMatch && !descMatch) throw new Error('Could not parse AI response')
-        
-        parsed = {
-          title: titleMatch?.[1] || '',
-          department: deptMatch?.[1] || 'Engineering',
-          description: descMatch?.[1] || '',
-        }
+      const parsed = await parsePDFLLM(file)
+
+      if (!parsed?.title && !parsed?.description) {
+        throw new Error('No job data found in PDF')
       }
+
+      const matchedDept =
+        DEPTS.find(
+          d => d.toLowerCase() === parsed.department?.toLowerCase()
+        ) || 'Engineering'
+
+      setJobForm(p => ({
+        ...p,
+        title: parsed.title || p.title,
+        description: parsed.description || p.description,
+        department: matchedDept,
+      }))
+      setPdfFile(file)
+    } catch (e) {
+      console.error('PDF parse error:', e)
+      alert(`Failed to extract PDF properly. ${e.message}`)
+    } finally {
+      setPdfParsing(false)
     }
-
-    if (!parsed?.title && !parsed?.description) {
-      throw new Error('No job data found in PDF')
-    }
-
-    const matchedDept = DEPTS.find(
-      d => d.toLowerCase() === parsed.department?.toLowerCase()
-    ) || 'Engineering'
-
-    setJobForm(p => ({
-      ...p,
-      title: parsed.title || p.title,
-      description: parsed.description || p.description,
-      department: matchedDept,
-    }))
-    setPdfFile(file)
-
-  } catch (e) {
-    console.error('PDF parse error:', e)
-    alert(`Failed to extract PDF properly. ${e.message}`)
-  } finally {
-    setPdfParsing(false)
-  }
-}
-
-  // ── Generate questions with Gemini ──
-  function safeParseQuestions(raw) {
-    // Try direct parse first
-    try { return JSON.parse(raw) } catch { }
-
-    // Gemini truncated the JSON — find the last fully-closed object and close the array
-    let depth = 0, inStr = false, escaped = false, lastGoodEnd = -1
-    for (let i = 0; i < raw.length; i++) {
-      const c = raw[i]
-      if (escaped) { escaped = false; continue }
-      if (c === '\\' && inStr) { escaped = true; continue }
-      if (c === '"') { inStr = !inStr; continue }
-      if (inStr) continue
-      if (c === '{') depth++
-      if (c === '}') { depth--; if (depth === 1) lastGoodEnd = i }
-    }
-    if (lastGoodEnd === -1) throw new Error('Could not parse questions from AI response.')
-    return JSON.parse(raw.slice(0, lastGoodEnd + 1) + ']')
   }
 
+  // ── Generate questions with local LLM backend ──
   async function generateQuestions() {
     setGenLoading(true)
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY
-      if (!apiKey) throw new Error('No API key found in .env')
-
-      const typeLabels = jobForm.question_types
-        .map(t => Q_TYPES.find(q => q.id === t)?.label)
-        .join(', ')
-
-      const levelGuidance = {
-        Beginner: `DIFFICULTY: Beginner (0–2 years experience)
-MUST include: definitions, basic syntax, what-is-X questions, simple one-step tasks, reading short code snippets.
-MUST NOT include: system design, architecture, design patterns, algorithms above O(n), debugging complex code, trade-off analysis, or leadership.
-COGNITIVE LEVEL: Recall and basic comprehension only. A fresh graduate or bootcamp student should be able to answer.
-EXAMPLE style: "What does X mean?", "Which of these is a correct way to declare Y?", "What will this 3-line code output?"`,
-
-        Intermediate: `DIFFICULTY: Intermediate (2–5 years experience)
-MUST include: applying concepts to real problems, debugging, common design patterns, data structures, writing small functions, explaining trade-offs between two approaches.
-MUST NOT include: distributed systems, large-scale architecture, team leadership, or highly advanced algorithms (e.g. graph theory, dynamic programming from scratch).
-COGNITIVE LEVEL: Application and analysis. The candidate should understand WHY, not just WHAT.
-EXAMPLE style: "How would you refactor this function?", "What is the difference between X and Y and when would you use each?", "Identify the bug in this code."`,
-
-        Senior: `DIFFICULTY: Senior (5+ years experience)
-MUST include: system design, scalability, architectural trade-offs, performance optimization, mentoring/code review scenarios, leading ambiguous technical decisions, cross-team concerns.
-MUST NOT include: basic definitions, syntax questions, or trivial how-to questions a junior could answer.
-COGNITIVE LEVEL: Evaluation and synthesis. Expect nuanced answers with context and justification.
-EXAMPLE style: "How would you design X to handle 10 million users?", "What are the trade-offs of approach A vs B in this scenario?", "How would you guide a junior engineer who keeps introducing N+1 query bugs?"`,
-      }
-      const prompt = `
-You are an elite technical interviewer and hiring manager.
-
-Generate exactly ${jobForm.num_questions} HIGH QUALITY interview questions.
-
-JOB ROLE:
-${jobForm.title}
-
-JOB DESCRIPTION:
-${jobForm.description}
-
-TECH STACK:
-${jobForm.tech_stack}
-
-CANDIDATE LEVEL:
-${jobForm.level}
-
-EXPECTED EXPERIENCE:
-
-- Beginner = No experience / fresh graduate
-- Intermediate = 1–3 years
-- Senior = 5+ years
-
-QUESTION FOCUS:
-${jobForm.question_focus?.join(', ')}
-
-QUESTION TYPES:
-${typeLabels}
-
-IMPORTANT RULES:
-
-- Questions MUST feel realistic and company-level.
-- Avoid generic textbook questions.
-- Tailor every question specifically to the tech stack.
-- Match the exact difficulty level.
-- DO NOT mix junior and senior difficulty.
-- Questions should test real-world engineering ability.
-- Add tricky debugging and scenario-based thinking when relevant.
-- Senior questions should include architecture and scalability.
-- Beginner questions should stay fundamental.
-- Intermediate questions should include practical coding logic.
-
-MCQ RULES:
-- Must include 4 options
-- Must include correct_answer
-
-OPEN TEXT RULES:
-- options must be null
-- correct_answer must contain a concise ideal answer
-- ideal answer should be 1-3 lines maximum
-- answer should explain what a strong candidate should mention
-
-TRUE/FALSE RULES:
-- Use concise statements
-
-LENGTH RULES:
-- Question < 140 chars
-- Explanation < 120 chars
-- Options < 60 chars
-
-RETURN ONLY VALID JSON ARRAY.
-
-FORMAT:
-[
-  {
-    "id":1,
-    "question":"...",
-    "type":"MCQ",
-    "options":["A","B","C","D"],
-    "correct_answer":"A",
-    "explanation":"..."
-  }
-]
-`
-
-      const data = await callGemini(apiKey, {
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 8192 }
+      const parsed = await generateQuestionsLLM({
+        title: jobForm.title,
+        description: jobForm.description,
+        level: jobForm.level,
+        num_questions: jobForm.num_questions,
+        question_types: jobForm.question_types,
+        tech_stack: jobForm.tech_stack || '',
+        question_focus: jobForm.question_focus || ['Balanced'],
       })
 
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
-      const clean = text.replace(/```json|```/g, '').trim()
-      const parsed = safeParseQuestions(clean)
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        throw new Error('LLM returned no questions')
+      }
+
       setQuestions(parsed)
       setModalStep(3)
-
     } catch (e) {
-      console.error('Gemini error:', e)
+      console.error('LLM error:', e)
       alert(`Failed: ${e.message}`)
     } finally {
       setGenLoading(false)
     }
   }
-
   function toggleQType(id) {
     setJobForm(p => ({
       ...p,
@@ -520,10 +301,11 @@ FORMAT:
       : q.explanation || '—'
 
     // Type label — normalise
-    const typeLabel = (q.type || '')
-      .replace('_', ' ')
-      .replace('OPEN TEXT', 'Open Text')
-      .replace('TRUE FALSE', 'True / False')
+    const rawT = (q.type || '').toLowerCase().replace(/[_\s/]+/g, '')
+    const typeLabel = rawT === 'mcq' ? 'MCQ'
+      : rawT.startsWith('true') ? 'True / False'
+      : (rawT.includes('open') || rawT.includes('text')) ? 'Open Text'
+      : q.type || ''
 
     return [i + 1, qText, typeLabel, answerGuide]
   })
@@ -755,10 +537,10 @@ FORMAT:
               {/* Stats */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                 {[
-                  { label: 'Total Jobs', value: stats.totalJobs, color: '#60a5fa' },
-                  { label: 'Total Candidates', value: stats.totalCandidates, color: '#a78bfa' },
-                  { label: 'Shortlisted (≥80%)', value: stats.shortlisted, color: '#4ade80' },
-                  { label: 'Pending Review', value: stats.pending, color: '#fbbf24' },
+                  { label: 'Total Jobs', value: stats.totalJobs, color: '#60a5fa', icon: '💼' },
+                  { label: 'Total Candidates', value: stats.totalCandidates, color: '#a78bfa', icon: '👥' },
+                  { label: 'Shortlisted (≥80%)', value: stats.shortlisted, color: '#4ade80', icon: '⭐' },
+                  { label: 'Pending Review', value: stats.pending, color: '#fbbf24', icon: '🕐' },
                 ].map((s, i) => (
                   <div key={i} className="rounded-2xl p-5" style={cardStyle}>
                     <div className="flex items-center justify-between mb-3">
@@ -935,11 +717,7 @@ FORMAT:
                                   <span className="font-bold text-gray-300">Q{i + 1}. </span>
                                   <textarea
                                     value={q.question}
-                                    onChange={e => {
-                                      const updated = [...questions]
-                                      updated[i].question = e.target.value
-                                      setQuestions(updated)
-                                    }}
+                                    readOnly
                                     className="w-full bg-transparent text-gray-200 outline-none resize-none"
                                     rows={2}
                                   />
@@ -1584,8 +1362,6 @@ FORMAT:
                   </button>
                 </div>
               )}
-              ```
-
 
               {/* STEP 2: Question types */}
               {modalStep === 2 && (
