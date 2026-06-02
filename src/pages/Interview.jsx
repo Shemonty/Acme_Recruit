@@ -42,12 +42,13 @@ export default function Interview() {
   const { jobId } = useParams()
   const navigate  = useNavigate()
 
-  const [phase, setPhase]         = useState('loading')
-  const [job, setJob]             = useState(null)
-  const [candidate, setCandidate] = useState(null)
-  const [answers, setAnswers]     = useState({}) // { [qIndex]: answerString }
-  const [timeLeft, setTimeLeft]   = useState(0)
-  const [result, setResult]       = useState(null)
+  const [phase, setPhase]               = useState('loading')
+  const [job, setJob]                   = useState(null)
+  const [candidate, setCandidate]       = useState(null)
+  const [answers, setAnswers]           = useState({})
+  const [timeLeft, setTimeLeft]         = useState(0)
+  const [result, setResult]             = useState(null)
+  const [scoringElapsed, setScoringElapsed] = useState(0)
 
   const jobRef       = useRef(null)
   const candidateRef = useRef(null)
@@ -58,6 +59,14 @@ export default function Interview() {
 
   useEffect(() => { init() }, [])
   useEffect(() => () => clearInterval(timerRef.current), [])
+
+  // Elapsed-seconds counter shown during AI scoring
+  useEffect(() => {
+    if (phase !== 'scoring') { setScoringElapsed(0); return }
+    setScoringElapsed(0)
+    const id = setInterval(() => setScoringElapsed(s => s + 1), 1000)
+    return () => clearInterval(id)
+  }, [phase])
 
   async function init() {
     try {
@@ -187,6 +196,8 @@ export default function Interview() {
     const openQs = scored.filter(a => a.type === 'Open Text')
     if (openQs.length > 0) {
       try {
+        // No timeout — let the LLM finish properly so correct answers get fair marks.
+        // Only falls back to 0 if the connection fails entirely.
         const aiScores = await scoreOpenAnswersLLM(
           openQs.map(q => ({
             question: q.question,
@@ -198,13 +209,12 @@ export default function Interview() {
         scored.forEach(a => {
           if (normalizeType(a.type) === 'Open Text') {
             const rawScore = aiScores[si++] ?? 0
-            // Blank answers always score 0 regardless of what AI returns
             a.points = a.answer?.trim() ? rawScore / 10 : 0
           }
         })
       } catch (e) {
-        console.error('LLM scoring failed:', e)
-        /* open text stays 0 if AI fails */
+        console.error('LLM scoring failed (connection error):', e)
+        /* open text stays 0 only if backend is unreachable */
       }
     }
     const total = scored.reduce((s, a) => s + a.points, 0)
@@ -502,8 +512,26 @@ export default function Interview() {
                 <span className="w-8 h-8 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin inline-block" />
               </div>
               <h2 className="text-2xl font-black text-white mb-2">Evaluating Your Answers</h2>
-              <p className="text-sm font-medium text-gray-300 leading-relaxed">
-                AI is reviewing your open-text responses.<br />This takes a few seconds...
+              <p className="text-sm font-medium text-gray-300 leading-relaxed mb-6">
+                {scoringElapsed < 10 && 'Grading MCQ & True/False answers...'}
+                {scoringElapsed >= 10 && scoringElapsed < 30 && 'AI is reading your written responses...'}
+                {scoringElapsed >= 30 && scoringElapsed < 60 && 'Local AI is thinking — your answers are being scored fairly...'}
+                {scoringElapsed >= 60 && 'Still going — do not close this page, your marks are being calculated...'}
+              </p>
+              {/* Animated pulse bar — no fixed end, shows progress is alive */}
+              <div className="w-full h-1.5 rounded-full overflow-hidden mb-3"
+                style={{ background: 'rgba(255,255,255,0.08)' }}>
+                <div className="h-full rounded-full"
+                  style={{
+                    width: `${Math.min(90, 10 + scoringElapsed * 1.2)}%`,
+                    background: scoringElapsed < 60
+                      ? 'linear-gradient(90deg,#1d4ed8,#60a5fa)'
+                      : 'linear-gradient(90deg,#d97706,#fbbf24)',
+                    transition: 'width 1s linear',
+                  }} />
+              </div>
+              <p className="text-xs font-bold tabular-nums" style={{ color: '#60a5fa' }}>
+                {scoringElapsed}s — please wait, do not refresh
               </p>
             </div>
           </div>

@@ -75,6 +75,7 @@ export default function CandidateAuth() {
   const [loginPassword, setLoginPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [showRegPass, setShowRegPass] = useState(false)
+  const [showConfirmPass, setShowConfirmPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [step, setStep] = useState(1)
@@ -662,12 +663,23 @@ export default function CandidateAuth() {
                         </div>
                         <div>
                           <label className={lc}>Confirm Password *</label>
-                          <input type="password" value={form.confirm_password} onChange={e => set('confirm_password', e.target.value)}
-                            placeholder="Re-enter" className={ic}
-                            style={{ ...IS, border: form.confirm_password && form.confirm_password !== form.password ? '1px solid rgba(239,68,68,0.6)' : form.confirm_password && form.confirm_password === form.password ? '1px solid rgba(34,197,94,0.6)' : IS.border }}
-                            onFocus={e => e.target.style.border = '1px solid rgba(59,130,246,0.55)'}
-                            onBlur={e => e.target.style.border = form.confirm_password && form.confirm_password !== form.password ? '1px solid rgba(239,68,68,0.6)' : form.confirm_password && form.confirm_password === form.password ? '1px solid rgba(34,197,94,0.6)' : '1px solid rgba(255,255,255,0.10)'} />
-                          {form.confirm_password && form.confirm_password === form.password && <p className="text-green-400 text-xs mt-1">✓ Match</p>}
+                          <div className="relative">
+                            <input type={showConfirmPass ? 'text' : 'password'} value={form.confirm_password}
+                              onChange={e => set('confirm_password', e.target.value)}
+                              placeholder="Re-enter" className={ic}
+                              style={{ ...IS, paddingRight: '3.5rem', border: form.confirm_password && form.confirm_password !== form.password ? '1px solid rgba(239,68,68,0.6)' : form.confirm_password && form.confirm_password === form.password ? '1px solid rgba(34,197,94,0.6)' : IS.border }}
+                              onFocus={e => e.target.style.border = '1px solid rgba(59,130,246,0.55)'}
+                              onBlur={e => e.target.style.border = form.confirm_password && form.confirm_password !== form.password ? '1px solid rgba(239,68,68,0.6)' : form.confirm_password && form.confirm_password === form.password ? '1px solid rgba(34,197,94,0.6)' : '1px solid rgba(255,255,255,0.10)'} />
+                            <button type="button" onClick={() => setShowConfirmPass(!showConfirmPass)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 text-xs font-bold">
+                              {showConfirmPass ? 'Hide' : 'Show'}
+                            </button>
+                          </div>
+                          {form.confirm_password && (
+                            form.confirm_password === form.password
+                              ? <p className="text-green-400 text-xs font-bold mt-1.5">✓ Passwords match</p>
+                              : <p className="text-red-400 text-xs font-bold mt-1.5">✗ Passwords do not match</p>
+                          )}
                         </div>
                       </div>
 

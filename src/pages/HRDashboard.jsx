@@ -84,6 +84,7 @@ export default function HRDashboard() {
   const [filterDecision, setFilterDecision] = useState('All')
   const [candProfile, setCandProfile] = useState(null)
   const [loadingProfile, setLoadingProfile] = useState(false)
+  const [emailStatus, setEmailStatus] = useState(null) // null | 'sending' | 'sent' | 'error'
 
   useEffect(() => { loadData() }, [])
 
@@ -433,6 +434,42 @@ export default function HRDashboard() {
     } catch { /* mock */ }
     setCandidates(prev => prev.map(c => c.id === appId ? { ...c, hr_decision: decision, hr_note: note } : c))
     setSelCandidate(prev => prev ? { ...prev, hr_decision: decision, hr_note: note } : null)
+  }
+
+  async function sendEmail() {
+    const candidateEmail = selCandidate?.email
+    const candidateName  = selCandidate?.full_name || 'Candidate'
+    const jobTitle       = selCandidate?.job_title || 'the position'
+    const decision       = selCandidate?.hr_decision
+    if (!candidateEmail || !decision) return
+    setEmailStatus('sending')
+    try {
+      const LLM_URL = import.meta.env.VITE_LLM_API_URL || 'http://localhost:8000'
+      const res = await fetch(`${LLM_URL}/api/send-notification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to_email: candidateEmail,
+          candidate_name: candidateName,
+          job_title: jobTitle,
+          hr_note: hrNote || '',
+          decision,
+        }),
+      })
+      if (res.ok) {
+        setEmailStatus('sent')
+        setTimeout(() => setEmailStatus(null), 4000)
+      } else {
+        const err = await res.json().catch(() => ({}))
+        console.warn('Email send failed:', err.detail)
+        setEmailStatus('error')
+        setTimeout(() => setEmailStatus(null), 6000)
+      }
+    } catch (e) {
+      console.warn('Email endpoint unreachable:', e.message)
+      setEmailStatus('error')
+      setTimeout(() => setEmailStatus(null), 6000)
+    }
   }
 
   async function fetchCandProfile(candidateId) {
@@ -898,6 +935,30 @@ export default function HRDashboard() {
                         Current: {DECISION_STYLE[selCandidate.hr_decision]?.label}
                       </p>
                     </div>
+
+                    {/* Send Email button */}
+                    {selCandidate.hr_decision && selCandidate.email && (
+                      <div className="mt-3">
+                        <button
+                          onClick={sendEmail}
+                          disabled={emailStatus === 'sending'}
+                          className="w-full py-2.5 rounded-xl text-xs font-black transition-all"
+                          style={{
+                            background: emailStatus === 'sending' ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.15)',
+                            border: '1px solid rgba(99,102,241,0.35)',
+                            color: emailStatus === 'sending' ? '#818cf8' : '#a5b4fc',
+                            opacity: emailStatus === 'sending' ? 0.7 : 1,
+                          }}>
+                          {emailStatus === 'sending' ? '📧 Sending...' : '📧 Send Email to Candidate'}
+                        </button>
+                        {emailStatus === 'sent' && (
+                          <p className="text-center text-xs font-bold mt-1.5" style={{ color: '#4ade80' }}>✅ Email sent successfully</p>
+                        )}
+                        {emailStatus === 'error' && (
+                          <p className="text-center text-xs font-bold mt-1.5" style={{ color: '#f87171' }}>⚠️ Failed to send — check backend logs</p>
+                        )}
+                      </div>
+                    )}
 
                     {/* View Full Profile button */}
                     {selCandidate.candidate_id && (
