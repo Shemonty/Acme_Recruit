@@ -11,6 +11,24 @@ const LEVEL_COLOR = {
   Senior:       { text: '#fbbf24', bg: 'rgba(234,179,8,0.12)',  border: 'rgba(234,179,8,0.30)' },
 }
 
+function calcExpYears(experience) {
+  if (!experience?.length) return 0
+  let totalMonths = 0
+  for (const exp of experience) {
+    if (!exp.start) continue
+    const start = new Date(exp.start + '-01')
+    const end   = exp.end ? new Date(exp.end + '-01') : new Date()
+    totalMonths += Math.max(0, (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth())
+  }
+  return totalMonths / 12
+}
+
+function getAllowedLevels(expYears) {
+  if (expYears >= 5) return ['Beginner', 'Intermediate', 'Senior']
+  if (expYears >= 2) return ['Beginner', 'Intermediate']
+  return ['Beginner']
+}
+
 // Normalise Gemini's inconsistent question type strings
 function normalizeType(raw) {
   const t = (raw || '').toLowerCase().replace(/[_\s/]+/g, '')
@@ -60,6 +78,16 @@ export default function Interview() {
       const { data: jobData } = await supabase.from('jobs').select('*').eq('id', jobId).single()
       if (!jobData?.questions?.length) {
         alert('This interview has no questions yet. Please check back later.')
+        navigate('/candidate/dashboard')
+        return
+      }
+
+      // ── Experience level eligibility guard ──
+      const expYears      = calcExpYears(cand?.experience)
+      const allowedLevels = getAllowedLevels(expYears)
+      if (jobData.level && !allowedLevels.includes(jobData.level)) {
+        const needed = jobData.level === 'Senior' ? '5+ years' : '2+ years'
+        alert(`This is a ${jobData.level} level interview. You need ${needed} of experience to attend. Your eligible levels: ${allowedLevels.join(', ')}.`)
         navigate('/candidate/dashboard')
         return
       }
@@ -213,35 +241,6 @@ export default function Interview() {
       } catch { /* offline */ }
     }
 
-    // ── Rank calculation: rank all submissions for this job by score desc ──
-    let myRank = null
-    try {
-      const { data: allApps } = await supabase
-        .from('applications')
-        .select('id, score')
-        .eq('job_id', jobId)
-        .order('score', { ascending: false })
-
-      if (allApps?.length) {
-        // Assign rank 1 = highest score; ties share the same rank
-        let rank = 0, prevScore = null, sameCount = 0
-        const rankMap = {}
-        for (const app of allApps) {
-          if (app.score !== prevScore) { rank += sameCount + 1; sameCount = 0 } else { sameCount++ }
-          rankMap[app.id] = rank
-          prevScore = app.score
-        }
-        // Persist ranks back to Supabase in bulk (best-effort)
-        const updates = allApps.map(app => supabase
-          .from('applications')
-          .update({ rank: rankMap[app.id] })
-          .eq('id', app.id)
-        )
-        await Promise.allSettled(updates)
-        myRank = insertedId ? rankMap[insertedId] : null
-      }
-    } catch { /* rank calc is non-critical */ }
-
     // ── Increment applicants count on the job ──
     try {
       const { data: jobRow } = await supabase
@@ -252,7 +251,7 @@ export default function Interview() {
         .eq('id', jobId)
     } catch { /* non-critical */ }
 
-    // ── Update local cache with real rank ──
+    // ── Update local cache ──
     try {
       const cached = JSON.parse(sessionStorage.getItem('local_applications') || '[]')
       const deduped = cached.filter(a => a.job_id !== jobId)
@@ -262,7 +261,6 @@ export default function Interview() {
         job_title: jobRef.current.title,
         department: jobRef.current.department,
         score,
-        rank: myRank,
         time_taken: totalMin,
         hr_decision: hrDecision,
         submitted_at: new Date().toISOString(),
@@ -270,7 +268,7 @@ export default function Interview() {
       sessionStorage.setItem('local_applications', JSON.stringify(deduped))
     } catch { /* storage unavailable */ }
 
-    setResult({ score, totalMin, hrDecision, scored, rank: myRank })
+    setResult({ score, totalMin, hrDecision, scored })
     setPhase('result')
   }
 

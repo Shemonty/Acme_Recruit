@@ -6,6 +6,24 @@ import bannerImg from '../images/banner.jpg'
 
 const MOCK_APPS = []
 
+function calcExpYears(experience) {
+  if (!experience?.length) return 0
+  let totalMonths = 0
+  for (const exp of experience) {
+    if (!exp.start) continue
+    const start = new Date(exp.start + '-01')
+    const end   = exp.end ? new Date(exp.end + '-01') : new Date()
+    totalMonths += Math.max(0, (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth())
+  }
+  return totalMonths / 12
+}
+
+function getAllowedLevels(expYears) {
+  if (expYears >= 5) return ['Beginner', 'Intermediate', 'Senior']
+  if (expYears >= 2) return ['Beginner', 'Intermediate']
+  return ['Beginner']
+}
+
 const LC = {
   Beginner:     { text: '#4ade80', bg: 'rgba(34,197,94,0.12)',  border: 'rgba(34,197,94,0.30)' },
   Intermediate: { text: '#60a5fa', bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.30)' },
@@ -116,10 +134,17 @@ async function loadJobs() {
     navigate('/')
   }
 
-  const appliedIds = apps.map(a => a.job_id)
-  const depts      = ['All', ...new Set(jobs.map(j => j.department))]
-  const levels     = ['All', 'Beginner', 'Intermediate', 'Senior']
-  const filtered   = jobs.filter(j => !appliedIds.includes(j.id) && (lvl === 'All' || j.level === lvl) && (dept === 'All' || j.department === dept))
+  const appliedIds    = apps.map(a => a.job_id)
+  const expYears      = calcExpYears(candidate?.experience)
+  const allowedLevels = getAllowedLevels(expYears)
+  const depts         = ['All', ...new Set(jobs.filter(j => allowedLevels.includes(j.level)).map(j => j.department))]
+  const levels        = ['All', ...allowedLevels]
+  const filtered      = jobs.filter(j =>
+    allowedLevels.includes(j.level) &&
+    !appliedIds.includes(j.id) &&
+    (lvl === 'All' || j.level === lvl) &&
+    (dept === 'All' || j.department === dept)
+  )
   const fmt        = d => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
 
   const name     = candidate?.full_name || 'Candidate'
@@ -199,6 +224,15 @@ async function loadJobs() {
             <div className="mb-8">
               <h1 className="text-3xl font-black text-white mb-1">Welcome back, <span className="text-blue-400">{first}</span></h1>
               <p className="text-gray-300 text-sm font-medium">{filtered.length} open positions available for you</p>
+              <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold"
+                style={{ background: 'rgba(59,130,246,0.10)', border: '1px solid rgba(59,130,246,0.22)', color: '#93c5fd' }}>
+                🎯 Eligible levels:&nbsp;
+                <span className="text-white">{allowedLevels.join(', ')}</span>
+                &nbsp;·&nbsp;
+                <span className="text-gray-300">
+                  {expYears === 0 ? 'Fresher' : `${Math.floor(expYears)}+ yrs experience`}
+                </span>
+              </div>
             </div>
 
             <div className="flex flex-wrap gap-2 mb-6">

@@ -120,13 +120,13 @@ export default function HRDashboard() {
           email: candMap[a.candidate_id]?.email || a.candidate_email || '',
           job_title: a.jobs?.title,
           score: a.score,
-          rank: a.rank,
           time_taken: a.time_taken,
           hr_decision: a.hr_decision,
           submitted_at: a.submitted_at,
           hr_note: a.hr_note,
           candidate_id: a.candidate_id,
           job_id: a.job_id,
+          answers: a.answers || [],
         }))
         setCandidates(mapped)
 
@@ -1013,6 +1013,37 @@ export default function HRDashboard() {
                       </div>
                     ))}
                 </div>
+
+                {/* Interview Answers */}
+                {selCandidate?.answers?.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest mb-3">📝 Interview Answers — {selCandidate.job_title}</p>
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                      {selCandidate.answers.map((a, i) => {
+                        const isOpen   = (a.type || '').toLowerCase().includes('open') || (a.type || '').toLowerCase().includes('text')
+                        const isCorrect = !isOpen && (a.answer || '').trim().toLowerCase() === (a.correct_answer || '').trim().toLowerCase()
+                        const aiScore  = isOpen ? Math.round((a.points || 0) * 10) : null
+                        return (
+                          <div key={i} className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                            <div className="flex items-start justify-between gap-2 mb-1">
+                              <p className="text-xs font-semibold text-gray-200 flex-1 leading-relaxed">
+                                <span className="text-gray-400 font-bold mr-1">Q{i + 1}.</span>{a.question}
+                              </p>
+                              {isOpen
+                                ? <span className="text-xs font-black flex-shrink-0" style={{ color: aiScore >= 7 ? '#4ade80' : aiScore >= 4 ? '#fbbf24' : '#f87171' }}>{aiScore}/10</span>
+                                : <span className="text-sm font-black flex-shrink-0" style={{ color: isCorrect ? '#4ade80' : '#f87171' }}>{isCorrect ? '✓' : '✗'}</span>
+                              }
+                            </div>
+                            {a.answer && <p className="text-[11px] text-blue-300 mt-1">Answer: {a.answer}</p>}
+                            {!isOpen && !isCorrect && a.correct_answer && (
+                              <p className="text-[11px] text-green-400 mt-0.5">Correct: {a.correct_answer}</p>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
 
               </div>
             )}

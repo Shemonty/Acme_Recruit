@@ -78,11 +78,21 @@ export default function CandidateAuth() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [step, setStep] = useState(1)
-  // 'confirm_email' phase: show "check your inbox" screen after register
-  const [phase, setPhase] = useState('auth') // 'auth' | 'confirm_email'
+  const [phase, setPhase] = useState('auth')
   const [registeredEmail, setRegisteredEmail] = useState('')
+  const [experiences, setExperiences] = useState([{ job_title: '', company: '', start: '', end: '', description: '' }])
 
   const set = (f, v) => { setForm(p => ({ ...p, [f]: v })); setError('') }
+
+  function addExperience() {
+    setExperiences(prev => [...prev, { job_title: '', company: '', start: '', end: '', description: '' }])
+  }
+  function removeExperience(i) {
+    setExperiences(prev => prev.filter((_, idx) => idx !== i))
+  }
+  function setExp(i, field, value) {
+    setExperiences(prev => prev.map((e, idx) => idx === i ? { ...e, [field]: value } : e))
+  }
 
   // Where to go after successful auth
   function goAfterAuth() {
@@ -218,7 +228,7 @@ export default function CandidateAuth() {
         address: `${form.address}, ${form.city}, ${form.country}`,
         linkedin: form.linkedin, portfolio: form.portfolio,
         education: { degree: form.degree, institution: form.institution, field_of_study: form.field_of_study, start_year: form.edu_start, end_year: form.edu_end, gpa: form.gpa },
-        experience: form.has_experience === 'yes' ? [{ job_title: form.job_title, company: form.company, start: form.exp_start, end: form.exp_end, description: form.exp_description }] : [],
+        experience: form.has_experience === 'yes' ? experiences.filter(e => e.job_title || e.company) : [],
         skills: form.skills.split(',').map(s => s.trim()).filter(Boolean),
         cover_letter: form.cover_letter,
       }))
@@ -253,7 +263,7 @@ export default function CandidateAuth() {
         linkedin: form.linkedin || null,
         portfolio: form.portfolio || null,
         education: { degree: form.degree, institution: form.institution, field_of_study: form.field_of_study, start_year: form.edu_start, end_year: form.edu_end, gpa: form.gpa },
-        experience: form.has_experience === 'yes' ? [{ job_title: form.job_title, company: form.company, start: form.exp_start, end: form.exp_end, description: form.exp_description }] : [],
+        experience: form.has_experience === 'yes' ? experiences.filter(e => e.job_title || e.company) : [],
         skills: form.skills.split(',').map(s => s.trim()).filter(Boolean),
         cover_letter: form.cover_letter || null,
       }
@@ -595,13 +605,41 @@ export default function CandidateAuth() {
                       </div>
 
                       {form.has_experience === 'yes' && (
-                        <div className="grid grid-cols-2 gap-5 p-4 rounded-xl"
-                          style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                          <Inp label="Job Title" type="text" value={form.job_title} onChange={e => set('job_title', e.target.value)} placeholder="e.g. Frontend Dev" />
-                          <Inp label="Company" type="text" value={form.company} onChange={e => set('company', e.target.value)} placeholder="Company name" />
-                          <Inp label="Start" type="month" value={form.exp_start} onChange={e => set('exp_start', e.target.value)} />
-                          <Inp label="End" type="month" value={form.exp_end} onChange={e => set('exp_end', e.target.value)} />
-                          <div className="col-span-2"><Txt label="Role Description" value={form.exp_description} onChange={e => set('exp_description', e.target.value)} placeholder="Briefly describe your responsibilities..." rows={2} /></div>
+                        <div className="space-y-3">
+                          {experiences.map((exp, i) => (
+                            <div key={i} className="p-4 rounded-xl relative"
+                              style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                              <div className="flex items-center justify-between mb-3">
+                                <p className="text-xs font-black text-blue-300 uppercase tracking-widest">
+                                  Experience {experiences.length > 1 ? `#${i + 1}` : ''}
+                                </p>
+                                {experiences.length > 1 && (
+                                  <button type="button" onClick={() => removeExperience(i)}
+                                    className="text-red-400 hover:text-red-300 text-lg leading-none font-bold">×</button>
+                                )}
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                <Inp label="Job Title" type="text" value={exp.job_title}
+                                  onChange={e => setExp(i, 'job_title', e.target.value)} placeholder="e.g. Frontend Dev" />
+                                <Inp label="Company" type="text" value={exp.company}
+                                  onChange={e => setExp(i, 'company', e.target.value)} placeholder="Company name" />
+                                <Inp label="Start" type="month" value={exp.start}
+                                  onChange={e => setExp(i, 'start', e.target.value)} />
+                                <Inp label="End (leave blank if current)" type="month" value={exp.end}
+                                  onChange={e => setExp(i, 'end', e.target.value)} />
+                                <div className="col-span-2">
+                                  <Txt label="Role Description" value={exp.description}
+                                    onChange={e => setExp(i, 'description', e.target.value)}
+                                    placeholder="Briefly describe your responsibilities..." rows={2} />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          <button type="button" onClick={addExperience}
+                            className="w-full py-3 rounded-xl text-xs font-black transition-all"
+                            style={{ background: 'rgba(59,130,246,0.08)', border: '1px dashed rgba(59,130,246,0.35)', color: '#60a5fa' }}>
+                            + Add Another Company
+                          </button>
                         </div>
                       )}
 
